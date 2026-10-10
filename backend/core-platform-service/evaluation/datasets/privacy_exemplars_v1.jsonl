@@ -1,0 +1,51 @@
+{"text": "Draft a technical blog post explaining how reciprocal rank fusion combines lexical and vector retrieval.", "label": "public"}
+{"text": "Write a short public changelog entry announcing our new dark mode feature.", "label": "public"}
+{"text": "Explain the difference between HNSW and IVFFlat indexes for a developer audience.", "label": "public"}
+{"text": "Summarize the publicly released OAuth 2.1 specification changes.", "label": "public"}
+{"text": "Generate marketing copy for a product launch landing page about workflow automation.", "label": "public"}
+{"text": "Write documentation describing how to install our open source CLI tool.", "label": "public"}
+{"text": "Draft a conference abstract about retrieval augmented generation techniques.", "label": "public"}
+{"text": "Explain what a vector embedding is in simple terms for a general audience.", "label": "public"}
+{"text": "Write a tutorial on configuring a PostgreSQL connection pool.", "label": "public"}
+{"text": "Compose a public FAQ answer about our supported browser versions.", "label": "public"}
+{"text": "Summarize best practices for writing accessible HTML forms.", "label": "public"}
+{"text": "Draft release notes for the open source SDK version 2.3.", "label": "public"}
+{"text": "Explain the CAP theorem with examples for a blog readership.", "label": "public"}
+{"text": "Write a short description of our company for a public partner directory.", "label": "public"}
+{"text": "Generate sample code showing how to call a public weather API.", "label": "public"}
+{"text": "Find internal documents describing our deployment runbook for the staging cluster.", "label": "internal"}
+{"text": "Summarize the internal architecture decision record about the caching layer.", "label": "internal"}
+{"text": "List the engineering team headcount by squad for the internal planning review.", "label": "internal"}
+{"text": "Retrieve the internal-only incident postmortem for the outage last week.", "label": "internal"}
+{"text": "What is the current sprint backlog status for the platform team?", "label": "internal"}
+{"text": "Summarize notes from the internal roadmap planning session.", "label": "internal"}
+{"text": "Find the proprietary design guidelines document in the shared drive.", "label": "internal"}
+{"text": "Query the database for the number of documents indexed by each workspace.", "label": "internal"}
+{"text": "Look up the internal service dependency map for the billing subsystem.", "label": "internal"}
+{"text": "Summarize the do-not-distribute competitive analysis deck.", "label": "internal"}
+{"text": "Retrieve internal onboarding checklist for new backend engineers.", "label": "internal"}
+{"text": "What are the agreed internal SLAs for the ingestion pipeline?", "label": "internal"}
+{"text": "Find the trade secret formulation notes referenced in the research folder.", "label": "internal"}
+{"text": "Summarize the internal migration plan for moving off the legacy queue.", "label": "internal"}
+{"text": "List which internal hosts in the 10.0.0.0 range are running the old agent.", "label": "internal"}
+{"text": "Summarize the Q3 payroll run and the bonus allocation per employee.", "label": "confidential"}
+{"text": "Update the employee record containing social security number 123-45-6789.", "label": "confidential"}
+{"text": "Process a refund to the customer credit card ending in the number on file.", "label": "confidential"}
+{"text": "Review the attorney-client privileged memo about the pending litigation.", "label": "confidential"}
+{"text": "Summarize the due diligence findings for the acquisition target.", "label": "confidential"}
+{"text": "Rotate the AWS access key currently stored in the deployment configuration.", "label": "confidential"}
+{"text": "Extract the patient diagnosis and prescription history from the medical record.", "label": "confidential"}
+{"text": "Draft a severance agreement for the terminated employee including compensation terms.", "label": "confidential"}
+{"text": "Update the database connection string that includes the production password.", "label": "confidential"}
+{"text": "Summarize the performance appraisal ratings and salary bands for the review cycle.", "label": "confidential"}
+{"text": "Store the customer passport number and date of birth in the KYC record.", "label": "confidential"}
+{"text": "Decrypt the private key block used to sign our release artifacts.", "label": "confidential"}
+{"text": "Compile the list of employee bank account details for the payroll transfer.", "label": "confidential"}
+{"text": "Summarize the confidential board deck covering the merger negotiation.", "label": "confidential"}
+{"text": "Retrieve the API key and client secret for the production payment gateway.", "label": "confidential"}
+{"text": "Write a concise overview of how HTTP caching headers work.", "label": "public"}
+{"text": "Explain how TLS certificate validation works in a browser.", "label": "public"}
+{"text": "Give an overview of how garbage collection works in managed runtimes.", "label": "public"}
+{"text": "Describe how a load balancer distributes incoming requests.", "label": "public"}
+{"text": "Explain how message queues decouple producers from consumers.", "label": "public"}
+{"text": "Summarize how OAuth refresh tokens differ from access tokens.", "label": "public"}

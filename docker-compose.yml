@@ -1,0 +1,76 @@
+services:
+  backend:
+    build:
+      context: ./backend/core-platform-service
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/core-platform-service/.env
+    environment:
+      # Overrides the .env values above: "localhost" inside a container is
+      # its own loopback, not this machine's Postgres/Ollama. See
+      # .env.docker.example for DOCKER_DATABASE_URL.
+      DATABASE_URL: ${DOCKER_DATABASE_URL}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # No `redis` service existed before Phase 8 -- app/cache/ already
+      # degrades gracefully without one (see RedisClient), but Phase 8's
+      # event bus/Celery broker need a reachable one to do anything.
+      REDIS_URL: redis://redis:6379/0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # AMOF-X Phase 8: Celery worker + beat. Same Postgres/Redis/Ollama the
+  # `backend` service uses -- worker/beat are just another caller of the
+  # same app code, not a separate deployment.
+  worker:
+    build:
+      context: ./backend/core-platform-service
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    env_file:
+      - ./backend/core-platform-service/.env
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      REDIS_URL: redis://redis:6379/0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+      - backend
+
+  beat:
+    build:
+      context: ./backend/core-platform-service
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    env_file:
+      - ./backend/core-platform-service/.env
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      REDIS_URL: redis://redis:6379/0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+      - backend
+
+  frontend:
+    build:
+      context: ./web
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./web/.env.local
+    environment:
+      # Next's server-side proxy target (see web/next.config.ts) -- the
+      # backend's compose service name, not localhost:8001.
+      BACKEND_INTERNAL_URL: http://backend:8001
+    depends_on:
+      - backend

@@ -1,0 +1,24 @@
+{"task_id": "p001", "text": "Write a public blog post comparing BM25 and dense retrieval for newcomers.", "label": "public"}
+{"task_id": "p002", "text": "Draft an announcement for our open source library reaching version 1.0.", "label": "public"}
+{"task_id": "p003", "text": "Explain how JSON Web Tokens work at a conceptual level for a tutorial.", "label": "public"}
+{"task_id": "p004", "text": "Generate example snippets showing pagination in a REST API.", "label": "public"}
+{"task_id": "p005", "text": "Write a plain language summary of what a rate limiter does.", "label": "public"}
+{"task_id": "p006", "text": "Compose a public help centre article about resetting a forgotten username.", "label": "public"}
+{"task_id": "p007", "text": "Draft a short talk outline on observability fundamentals.", "label": "public"}
+{"task_id": "p008", "text": "Explain database normalisation to a student audience.", "label": "public"}
+{"task_id": "p009", "text": "Summarize the internal engineering standards document for code review.", "label": "internal"}
+{"task_id": "p010", "text": "Find the internal capacity planning spreadsheet for next quarter.", "label": "internal"}
+{"task_id": "p011", "text": "What does our internal runbook say about failing over the primary database?", "label": "internal"}
+{"task_id": "p012", "text": "Retrieve the company confidential vendor comparison summary.", "label": "internal"}
+{"task_id": "p013", "text": "Count how many active workspaces exist in the platform database.", "label": "internal"}
+{"task_id": "p014", "text": "Summarize the proprietary indexing heuristics used by our search tier.", "label": "internal"}
+{"task_id": "p015", "text": "List the internal servers on 192.168.10.4 pending a security patch.", "label": "internal"}
+{"task_id": "p016", "text": "Pull the internal-only meeting notes from the architecture review.", "label": "internal"}
+{"task_id": "p017", "text": "Prepare the payroll summary including the salary and bonus for each employee.", "label": "confidential"}
+{"task_id": "p018", "text": "Validate the customer card 4111 1111 1111 1111 before charging it.", "label": "confidential"}
+{"task_id": "p019", "text": "Update the personnel file for the employee with SSN 078-05-1120.", "label": "confidential"}
+{"task_id": "p020", "text": "Summarize the privileged and confidential legal opinion on the dispute.", "label": "confidential"}
+{"task_id": "p021", "text": "Rotate the credential AKIAIOSFODNN7EXAMPLE used by the build pipeline.", "label": "confidential"}
+{"task_id": "p022", "text": "Extract the patient chart and blood group from the uploaded medical record.", "label": "confidential"}
+{"task_id": "p023", "text": "Set the service password: hunter2correctbattery in the config file.", "label": "confidential"}
+{"task_id": "p024", "text": "Summarize the non-disclosure agreement terms for the acquisition talks.", "label": "confidential"}

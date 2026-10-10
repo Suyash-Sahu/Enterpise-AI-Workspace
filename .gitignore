@@ -1,0 +1,258 @@
+# ==============================================================================
+# AMOF — Adaptive Multi-Agent AI Workspace
+# Monorepo .gitignore
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Environment & Secrets
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+**/.env
+**/.env.*
+!**/.env.example
+
+credentials.json
+**/credentials.json
+client_secret*.json
+**/client_secret*.json
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# ------------------------------------------------------------------------------
+# 2. Python / FastAPI
+# ------------------------------------------------------------------------------
+__pycache__/
+**/__pycache__/
+
+*.py[cod]
+*$py.class
+
+.venv/
+venv/
+ENV/
+env/
+
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.pyre/
+.pytype/
+
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+wheels/
+
+# ------------------------------------------------------------------------------
+# 3. Python Test / Temporary Files
+# ------------------------------------------------------------------------------
+.pytest_cache/
+.tox/
+.nox/
+hypothesis/
+.mutmut-cache/
+
+*.tmp
+*.temp
+
+# ------------------------------------------------------------------------------
+# 4. Alembic / Database Local Artifacts
+# ------------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db-journal
+
+fallback.db
+core_platform_db
+
+# ------------------------------------------------------------------------------
+# 5. Application Storage / Uploads
+# ------------------------------------------------------------------------------
+storage/
+**/storage/
+
+uploads/
+**/uploads/
+
+.tempmediaStorage/
+**/.tempmediaStorage/
+
+media/
+**/media/
+
+# ------------------------------------------------------------------------------
+# 6. Logs
+# ------------------------------------------------------------------------------
+*.log
+*.log.*
+logs/
+**/logs/
+
+# ------------------------------------------------------------------------------
+# 7. Node.js
+# ------------------------------------------------------------------------------
+node_modules/
+**/node_modules/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ------------------------------------------------------------------------------
+# 8. Next.js / React
+# ------------------------------------------------------------------------------
+.next/
+**/.next/
+
+out/
+**/out/
+
+dist/
+**/dist/
+
+build/
+**/build/
+
+.turbo/
+**/.turbo/
+
+.vercel/
+**/.vercel/
+
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ------------------------------------------------------------------------------
+# 9. Frontend Test / Coverage
+# ------------------------------------------------------------------------------
+coverage/
+**/coverage/
+
+.vitest/
+playwright-report/
+test-results/
+
+# ------------------------------------------------------------------------------
+# 10. AI / ML / Vector / Evaluation Artifacts
+# ------------------------------------------------------------------------------
+# Local model/cache files
+.huggingface/
+.cache/
+**/.cache/
+
+# Local vector databases / indexes
+.chroma/
+**/.chroma/
+
+chroma_db/
+**/chroma_db/
+
+qdrant_storage/
+**/qdrant_storage/
+
+# Local evaluation output
+evaluation_results/
+**/evaluation_results/
+
+eval_results/
+**/eval_results/
+
+benchmark_results/
+**/benchmark_results/
+
+# Generated experiment artifacts
+artifacts/
+**/artifacts/
+
+# ------------------------------------------------------------------------------
+# 11. Celery / Runtime / Temporary
+# ------------------------------------------------------------------------------
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid
+
+*.pid
+*.sock
+
+tmp/
+temp/
+.tmp/
+**/tmp/
+**/temp/
+**/.tmp/
+
+# ------------------------------------------------------------------------------
+# 12. IDE / Editors
+# ------------------------------------------------------------------------------
+.vscode/
+.idea/
+
+*.swp
+*.swo
+*.swn
+
+*.sublime-workspace
+*.sublime-project
+
+.gemini/
+.kiro/
+.cursor/
+.claude/
+
+# ------------------------------------------------------------------------------
+# 13. OS
+# ------------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ------------------------------------------------------------------------------
+# 14. Claude / AI Tool Temporary Files
+# ------------------------------------------------------------------------------
+.claude/
+.claude-worktrees/
+
+# ------------------------------------------------------------------------------
+# 15. Generated Documentation / Temporary Reports
+# ------------------------------------------------------------------------------
+*.bak
+*.backup
+
+# ------------------------------------------------------------------------------
+# 16. Keep Example Configuration Files
+# ------------------------------------------------------------------------------
+!.env.example
+!**/.env.example
+
+
+# Local scratch / experiments
+scratch/
+**/scratch/
+
+
+# Rust / Tauri build artifacts
+**/target/
+**/src-tauri/target/
+
+# ------------------------------------------------------------------------------
+# 17. Local archive (old docs/notes moved out of the tracked tree, not deleted)
+# ------------------------------------------------------------------------------
+.archive/

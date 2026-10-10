@@ -1,0 +1,187 @@
+{
+  "dataset_type": "ILLUSTRATIVE_PROTOTYPE",
+  "version": "v1.0.0",
+  "warning": "Demonstration values only. Replace with measured evaluation output before claiming quantitative performance.",
+  "disclaimer": "These values demonstrate the intended academic evaluation presentation and are not measured production telemetry.",
+  "executive_summary": {
+    "routing_accuracy": {
+      "value": 0.92,
+      "label": "92%",
+      "status": "ILLUSTRATIVE",
+      "subtitle": "Task-to-model allocation"
+    },
+    "completion_rate": {
+      "value": 0.89,
+      "label": "89%",
+      "status": "ILLUSTRATIVE",
+      "subtitle": "End-to-end success rate"
+    },
+    "cost_reduction": {
+      "value": 0.38,
+      "label": "38%",
+      "status": "ILLUSTRATIVE",
+      "subtitle": "vs Always Cloud strategy"
+    },
+    "token_reduction": {
+      "value": 0.31,
+      "label": "31%",
+      "status": "ILLUSTRATIVE",
+      "subtitle": "Reduced cloud token usage"
+    },
+    "latency_improvement": {
+      "value": 0.18,
+      "label": "18%",
+      "status": "ILLUSTRATIVE",
+      "subtitle": "Faster local execution"
+    },
+    "privacy_leak_rate": {
+      "value": 0.04,
+      "label": "4%",
+      "status": "ILLUSTRATIVE",
+      "subtitle": "Sensitive tasks to cloud"
+    },
+    "p8_enforcement": {
+      "value": 1.0,
+      "label": "100%",
+      "status": "ILLUSTRATIVE",
+      "subtitle": "Side-effect approval gate"
+    },
+    "automation_rate": {
+      "value": 0.86,
+      "label": "86%",
+      "status": "ILLUSTRATIVE",
+      "subtitle": "Unassisted completion"
+    }
+  },
+  "baseline_comparison": [
+    {
+      "baseline_name": "Always Cloud",
+      "routing_accuracy": 0.50,
+      "avg_latency_ms": 1420.0,
+      "cost_per_1k_usd": 18.40,
+      "tokens_per_task": 2450,
+      "completion_rate": 0.94,
+      "privacy_leak_rate": 1.00,
+      "status": "ILLUSTRATIVE"
+    },
+    {
+      "baseline_name": "Always Local",
+      "routing_accuracy": 0.45,
+      "avg_latency_ms": 1917.0,
+      "cost_per_1k_usd": 6.20,
+      "tokens_per_task": 1421,
+      "completion_rate": 0.71,
+      "privacy_leak_rate": 0.00,
+      "status": "ILLUSTRATIVE"
+    },
+    {
+      "baseline_name": "Static Rule",
+      "routing_accuracy": 0.76,
+      "avg_latency_ms": 1476.0,
+      "cost_per_1k_usd": 13.10,
+      "tokens_per_task": 1935,
+      "completion_rate": 0.83,
+      "privacy_leak_rate": 0.38,
+      "status": "ILLUSTRATIVE"
+    },
+    {
+      "baseline_name": "AMOF (Proposed)",
+      "routing_accuracy": 0.92,
+      "avg_latency_ms": 1292.0,
+      "cost_per_1k_usd": 10.90,
+      "tokens_per_task": 1690,
+      "completion_rate": 0.89,
+      "privacy_leak_rate": 0.04,
+      "status": "ILLUSTRATIVE"
+    }
+  ],
+  "cost_efficiency": {
+    "cost_per_1k_tasks": [
+      { "strategy": "Always Cloud", "cost_usd": 18.40 },
+      { "strategy": "Always Local", "cost_usd": 6.20 },
+      { "strategy": "Static Rule", "cost_usd": 13.10 },
+      { "strategy": "AMOF Workspace", "cost_usd": 10.90 }
+    ],
+    "potential_savings_vs_cloud_pct": 40.76,
+    "status": "ILLUSTRATIVE"
+  },
+  "token_efficiency": {
+    "by_complexity": [
+      { "complexity": "Simple Tasks", "always_cloud": 1200, "always_local": 950, "static_rule": 1100, "amof": 980 },
+      { "complexity": "Medium Tasks", "always_cloud": 2600, "always_local": 1600, "static_rule": 2100, "amof": 1850 },
+      { "complexity": "Complex Tasks", "always_cloud": 4100, "always_local": 1900, "static_rule": 3200, "amof": 2750 }
+    ],
+    "status": "ILLUSTRATIVE"
+  },
+  "latency_analysis": {
+    "scenarios": [
+      { "category": "Simple Tasks", "always_cloud": 980, "always_local": 1120, "static_rule": 1050, "amof": 890 },
+      { "category": "Medium Tasks", "always_cloud": 1450, "always_local": 2100, "static_rule": 1520, "amof": 1340 },
+      { "category": "Complex Tasks", "always_cloud": 2200, "always_local": 3400, "static_rule": 2600, "amof": 2100 }
+    ],
+    "routing_overhead_ms": "Measurement unavailable",
+    "status": "ILLUSTRATIVE"
+  },
+  "privacy_analysis": {
+    "confidential_tasks_sent_to_cloud": [
+      { "strategy": "Always Cloud", "leak_pct": 100 },
+      { "strategy": "Always Local", "leak_pct": 0 },
+      { "strategy": "Static Rule", "leak_pct": 38 },
+      { "strategy": "AMOF Workspace", "leak_pct": 4 }
+    ],
+    "status": "ILLUSTRATIVE"
+  },
+  "execution_distribution": {
+    "local_pct": 64,
+    "cloud_pct": 36,
+    "breakdown": [
+      { "complexity": "Simple Tasks", "local_pct": 92, "cloud_pct": 8 },
+      { "complexity": "Medium Tasks", "local_pct": 65, "cloud_pct": 35 },
+      { "complexity": "Complex Tasks", "local_pct": 20, "cloud_pct": 80 }
+    ],
+    "status": "ILLUSTRATIVE"
+  },
+  "task_automation": [
+    { "category": "Document Search", "completion_rate_pct": 95 },
+    { "category": "Summarization", "completion_rate_pct": 94 },
+    { "category": "RAG QA", "completion_rate_pct": 91 },
+    { "category": "Database Query", "completion_rate_pct": 88 },
+    { "category": "Email Drafting", "completion_rate_pct": 86 },
+    { "category": "Email Sending (P8)", "completion_rate_pct": 100 },
+    { "category": "Calendar Creation", "completion_rate_pct": 89 },
+    { "category": "Multi-step Research", "completion_rate_pct": 82 }
+  ],
+  "rag_benchmark": [
+    { "strategy": "Pure Keyword Search", "precision_1": 68, "precision_3": 74, "precision_5": 78, "context_relevance": 72 },
+    { "strategy": "Pure Vector Search", "precision_1": 76, "precision_3": 82, "precision_5": 85, "context_relevance": 81 },
+    { "strategy": "Hybrid Search (AMOF)", "precision_1": 84, "precision_3": 90, "precision_5": 93, "context_relevance": 91 }
+  ],
+  "ablation_study": [
+    { "configuration": "Baseline", "completion": 74, "cost": 100, "privacy": 61, "verification": 55, "status": "ILLUSTRATIVE" },
+    { "configuration": "+ Routing", "completion": 79, "cost": 78, "privacy": 76, "verification": 62, "status": "ILLUSTRATIVE" },
+    { "configuration": "+ Verification", "completion": 84, "cost": 80, "privacy": 77, "verification": 88, "status": "ILLUSTRATIVE" },
+    { "configuration": "+ HITL Approval", "completion": 87, "cost": 82, "privacy": 91, "verification": 92, "status": "ILLUSTRATIVE" },
+    { "configuration": "Full AMOF System", "completion": 90, "cost": 62, "privacy": 94, "verification": 96, "status": "ILLUSTRATIVE" }
+  ],
+  "feature_comparison": [
+    { "feature": "Multi-agent decomposition", "chatbot": "Not a primary capability", "rag": "Not a primary capability", "generic_multi_agent": "Available", "amof": "Core design goal" },
+    { "feature": "Local model execution", "chatbot": "Not a primary capability", "rag": "Limited / implementation-dependent", "generic_multi_agent": "Limited / implementation-dependent", "amof": "Core design goal" },
+    { "feature": "Cloud model execution", "chatbot": "Available", "rag": "Available", "generic_multi_agent": "Available", "amof": "Core design goal" },
+    { "feature": "Adaptive routing", "chatbot": "Not a primary capability", "rag": "Not a primary capability", "generic_multi_agent": "Limited / implementation-dependent", "amof": "Core design goal" },
+    { "feature": "Privacy-aware routing", "chatbot": "Not a primary capability", "rag": "Not a primary capability", "generic_multi_agent": "Limited / implementation-dependent", "amof": "Core design goal" },
+    { "feature": "Enterprise document grounding", "chatbot": "Limited / implementation-dependent", "rag": "Available", "generic_multi_agent": "Limited / implementation-dependent", "amof": "Core design goal" },
+    { "feature": "Gmail / Drive integration", "chatbot": "Not a primary capability", "rag": "Not a primary capability", "generic_multi_agent": "Limited / implementation-dependent", "amof": "Core design goal" },
+    { "feature": "Database querying agent", "chatbot": "Not a primary capability", "rag": "Not a primary capability", "generic_multi_agent": "Limited / implementation-dependent", "amof": "Core design goal" },
+    { "feature": "Human approval (P8 guard)", "chatbot": "Not a primary capability", "rag": "Not a primary capability", "generic_multi_agent": "Limited / implementation-dependent", "amof": "Core design goal" },
+    { "feature": "Execution audit trail", "chatbot": "Limited / implementation-dependent", "rag": "Limited / implementation-dependent", "generic_multi_agent": "Available", "amof": "Core design goal" }
+  ],
+  "efficiency_summary": {
+    "metrics": [
+      { "metric": "Cost", "baseline": 100, "amof": 62 },
+      { "metric": "Tokens", "baseline": 100, "amof": 69 },
+      { "metric": "Latency", "baseline": 100, "amof": 91 },
+      { "metric": "Manual Effort", "baseline": 100, "amof": 28 }
+    ],
+    "status": "ILLUSTRATIVE"
+  }
+}

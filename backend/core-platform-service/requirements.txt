@@ -1,0 +1,81 @@
+# Core Web Framework & Server
+fastapi>=0.105.0
+uvicorn[standard]>=0.25.0
+starlette>=0.27.0
+
+# Data Validation & Settings
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+email-validator>=2.1.0
+
+# Database & Migrations
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+psycopg2-binary>=2.9.9
+
+# Authentication & Security
+python-jose[cryptography]>=3.3.0
+# argon2 is the primary password hash. passlib was dropped: 1.7.4 is
+# effectively unmaintained and reads a bcrypt attribute removed in bcrypt 4.1,
+# so `pip install -r requirements.txt` resolved to a combination that could not
+# hash a password at all.
+argon2-cffi>=23.1.0
+# Still required to verify pre-existing bcrypt hashes, which are upgraded to
+# argon2 on each user's next successful login.
+bcrypt>=4.1.0
+python-multipart>=0.0.6
+cryptography>=41.0.0
+itsdangerous>=2.1.2
+
+# Rate limiting. slowapi rather than fastapi-limiter because the latter needs a
+# reachable Redis, and auth throttling must not depend on an optional service.
+slowapi>=0.1.9
+
+# SQL parsing for the Database Agent's read-only validator. Replaces regex
+# matching, which could be evaded with comments, string literals and CTEs.
+sqlglot>=25.0.0
+
+# Google Workspace Connectors & OAuth
+google-api-python-client>=2.100.0
+google-auth>=2.25.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+requests-oauthlib>=1.3.1
+
+# HTTP Clients & Utilities
+requests>=2.31.0
+httpx>=0.25.0
+python-dotenv>=1.0.0
+click>=8.1.0
+
+# Cache (optional — see app/cache)
+redis>=5.0.0
+
+# Background workers (AMOF-X Phase 8 — see app/workers). Broker/result
+# backend is the same Redis instance app/cache already talks to
+# (settings.REDIS_URL), not a second dependency.
+celery>=5.3.0
+
+# Testing & Development
+pytest>=8.0.0
+# Dataset-generation only. Generates realistic-but-fake PII (names, SSNs,
+# Luhn-valid card numbers, addresses) for the synthetic privacy-classifier
+# corpus in evaluation/datasets/generate_privacy_corpus.py. Never imported
+# by app/ -- no fake PII library belongs in a request path.
+faker>=24.0.0
+# Evaluation harness only (app/evaluation/harness_v2.py preflight). Logs
+# RAM/CPU headroom at sweep start so latency-variance findings can be
+# attributed to hardware constraints instead of presented as an inherent
+# property of the router.
+psutil>=5.9.0
+# Evaluation harness only (paired significance test, router vs strongest
+# baseline). Using scipy.stats.ttest_rel/wilcoxon rather than a hand-rolled
+# t-distribution CDF -- unlike Cohen's kappa (elementary arithmetic, easy to
+# hand-verify), a paper's significance claim should rest on a standard,
+# citable statistics library, not a bespoke implementation that itself needs
+# correctness proof.
+scipy>=1.11.0
+# Evaluation harness only (Phase 14: chart generation for the export
+# pipeline). Uses the non-interactive "Agg" backend explicitly -- this
+# process has no display and must never block on one.
+matplotlib>=3.8.0

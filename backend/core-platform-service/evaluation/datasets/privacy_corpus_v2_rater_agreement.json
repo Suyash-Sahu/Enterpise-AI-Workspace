@@ -1,0 +1,9 @@
+{
+  "n_items": 44,
+  "n_rated": 44,
+  "n_failed": 0,
+  "n_disagreements": 0,
+  "agreement_pct": 1.0,
+  "cohens_kappa": 1.0,
+  "note": "Computed over the ambiguous-tagged subset only unless --all was passed. Disagreements are unresolved until manually adjudicated -- see privacy_corpus_v2_disagreements.jsonl."
+}

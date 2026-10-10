@@ -1,0 +1,13 @@
+Compare the two documents.
+
+Return:
+
+Summary
+
+Similarities
+
+Differences
+
+Missing Information
+
+Recommendation

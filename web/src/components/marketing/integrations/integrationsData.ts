@@ -1,0 +1,153 @@
+import {
+    Mail,
+    FileText,
+    MessageSquare,
+    Database,
+    Calendar,
+    CheckSquare,
+    Folder,
+    Code,
+    BookOpen,
+    Users,
+    Table,
+    Share2,
+} from "lucide-react";
+
+export interface IntegrationItem {
+    id: string;
+    name: string;
+    category: "google" | "microsoft" | "productivity" | "developer" | "database";
+    description: string;
+    icon: typeof Mail;
+    color: string;
+    badge: string;
+    capabilities: string[];
+    isLive?: boolean;
+}
+
+export const INTEGRATIONS: IntegrationItem[] = [
+    {
+        id: "gmail",
+        name: "Gmail",
+        category: "google",
+        description: "Read, summarize, and draft emails with mandatory human approval before sending.",
+        icon: Mail,
+        color: "text-red-500",
+        badge: "Live v1 Integration",
+        capabilities: ["Thread search & summary", "Draft email generation", "Approved send via OAuth2"],
+        isLive: true,
+    },
+    {
+        id: "gdrive",
+        name: "Google Drive",
+        category: "google",
+        description: "Direct vector ingestion of Google Docs, Sheets, Slides, and PDFs with user permissions.",
+        icon: Folder,
+        color: "text-amber-500",
+        badge: "Live v1 Integration",
+        capabilities: ["OAuth2 drive sync", "RAG vector indexing", "Real-time file change polling"],
+        isLive: true,
+    },
+    {
+        id: "slack",
+        name: "Slack",
+        category: "productivity",
+        description: "Search channel histories, summarize project discussions, and draft message updates.",
+        icon: MessageSquare,
+        color: "text-emerald-500",
+        badge: "Native Adapter",
+        capabilities: ["Channel history search", "Direct message summaries", "Thread auto-replies"],
+    },
+    {
+        id: "notion",
+        name: "Notion",
+        category: "productivity",
+        description: "Extract knowledge from team wikis, database pages, and documentation hubs.",
+        icon: BookOpen,
+        color: "text-stone-400",
+        badge: "Native Adapter",
+        capabilities: ["Wiki page retrieval", "Database property indexing", "Nested doc sync"],
+    },
+    {
+        id: "jira",
+        name: "Jira",
+        category: "developer",
+        description: "Query sprint status, create bug reports, and update issue tickets via natural language.",
+        icon: CheckSquare,
+        color: "text-blue-500",
+        badge: "Enterprise Connector",
+        capabilities: ["JQL semantic translation", "Ticket creation with approval", "Sprint status digests"],
+    },
+    {
+        id: "postgres",
+        name: "SQL Databases",
+        category: "database",
+        description: "Text-to-SQL querying for PostgreSQL, MySQL, and Snowflake with read-only sandboxing.",
+        icon: Database,
+        color: "text-indigo-400",
+        badge: "Live Text-to-SQL",
+        capabilities: ["Schema-aware SQL generation", "Read-only query enforcement", "Data table rendering"],
+        isLive: true,
+    },
+    {
+        id: "outlook",
+        name: "Outlook",
+        category: "microsoft",
+        description: "Sync corporate inbox, read Microsoft Exchange emails, and compose replies.",
+        icon: Mail,
+        color: "text-sky-500",
+        badge: "Microsoft 365",
+        capabilities: ["Inbox RAG search", "Draft composition", "Exchange calendar check"],
+    },
+    {
+        id: "onedrive",
+        name: "OneDrive",
+        category: "microsoft",
+        description: "Index Word docs, Excel workbooks, and PowerPoint decks across SharePoint libraries.",
+        icon: FileText,
+        color: "text-cyan-500",
+        badge: "Microsoft 365",
+        capabilities: ["SharePoint indexing", "Doc parser", "User-scoped ACL compliance"],
+    },
+    {
+        id: "teams",
+        name: "Microsoft Teams",
+        category: "microsoft",
+        description: "Access meeting transcripts, team channels, and chat logs across enterprise tenants.",
+        icon: Users,
+        color: "text-violet-500",
+        badge: "Microsoft 365",
+        capabilities: ["Meeting transcript RAG", "Channel message search", "Action item extraction"],
+    },
+    {
+        id: "linear",
+        name: "Linear",
+        category: "developer",
+        description: "Streamline engineering workflows, issue tracking, and roadmap updates.",
+        icon: Code,
+        color: "text-purple-400",
+        badge: "Developer Tool",
+        capabilities: ["Issue status query", "Cycle progress analysis", "Automated release summaries"],
+    },
+    {
+        id: "confluence",
+        name: "Confluence",
+        category: "developer",
+        description: "Index technical spec docs, architecture decision records, and team runbooks.",
+        icon: Table,
+        color: "text-blue-400",
+        badge: "Enterprise Connector",
+        capabilities: ["Space documentation RAG", "ADR search", "Runbook extraction"],
+    },
+    {
+        id: "localfiles",
+        name: "Local Workspace Files",
+        category: "database",
+        description: "Parse PDFs, Markdown, CSV, and code files stored directly on your desktop machine.",
+        icon: Share2,
+        color: "text-teal-400",
+        badge: "Local File Agent",
+        capabilities: ["On-device file parsing", "Zero cloud upload", "Instant local vector store"],
+        isLive: true,
+    },
+];

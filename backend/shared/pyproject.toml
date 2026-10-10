@@ -1,0 +1,9 @@
+[project]
+name = "amof-shared"
+version = "1.0.0"
+description = "Shared clients, schemas and utilities for Enterprise AI Workspace"
+requires-python = ">=3.11"
+
+dependencies = [
+    "requests"
+]
