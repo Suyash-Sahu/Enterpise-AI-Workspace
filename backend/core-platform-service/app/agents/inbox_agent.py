@@ -250,12 +250,29 @@ class InboxAgent:
 
     @staticmethod
     def _fallback(message: dict[str, Any], reason: str) -> dict[str, Any]:
+        subject = str(message.get("subject") or "").lower()
+        snippet = str(message.get("snippet") or "").lower()
+        labels = [str(lbl).upper() for lbl in (message.get("labels") or message.get("labelIds") or [])]
+
+        if "IMPORTANT" in labels or any(w in subject for w in ("urgent", "asap", "immediate", "action required", "escalat", "critical", "incident")):
+            label = "urgent"
+            heuristic_reason = "Flagged urgent based on priority keywords"
+        elif any(w in subject or w in snippet for w in ("please confirm", "can you", "feedback needed", "review", "approve", "approval", "?")):
+            label = "needs_reply"
+            heuristic_reason = "Contains inquiry or request for reply"
+        elif any(w in subject or w in snippet for w in ("unsubscribe", "newsletter", "sale", "discount", "promot", "marketing")):
+            label = "spam"
+            heuristic_reason = "Promotional or newsletter pattern"
+        else:
+            label = "fyi"
+            heuristic_reason = reason or "Informational update"
+
         return {
             "id": message.get("id"),
             "subject": message.get("subject"),
-            "from": message.get("from"),
-            "label": "fyi",
-            "reason": reason,
+            "from": message.get("from") or message.get("sender"),
+            "label": label,
+            "reason": heuristic_reason,
         }
 
     def draft_reply(

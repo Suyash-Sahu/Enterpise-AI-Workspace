@@ -24,3 +24,29 @@ class GoogleNotConnectedError(GoogleConnectorError):
         message: str = "No Google account is connected to this workspace user.",
     ) -> None:
         super().__init__(message)
+
+
+class GoogleReauthRequiredError(GoogleConnectorError):
+    """
+    Google account needs reauthorization due to missing or revoked scopes.
+    """
+
+    def __init__(
+        self,
+        message: str = "Google account permissions require reauthorization. Please reconnect your account.",
+        scope_required: str | None = None,
+    ) -> None:
+        self.scope_required = scope_required
+        super().__init__(message)
+
+
+class GoogleServiceDisabledError(GoogleConnectorError):
+    """
+    Google API service is disabled or not enabled in the Google Cloud Project.
+    """
+
+    def __init__(
+        self,
+        message: str = "The requested Google service is not enabled in your Google Cloud Project.",
+    ) -> None:
+        super().__init__(message)

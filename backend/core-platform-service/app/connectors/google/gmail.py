@@ -1,4 +1,5 @@
 import base64
+from typing import Optional
 from email.mime.text import MIMEText
 
 import requests
@@ -91,20 +92,24 @@ class GmailClient:
     def list_messages(
         self,
         max_results: int = 20,
+        page_token: Optional[str] = None,
+        include_metadata: bool = True,
     ):
-
+        params: dict[str, object] = {
+            "maxResults": max_results,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        if include_metadata:
+            params["format"] = "metadata"
+            params["metadataHeaders"] = "From,Subject,Date"
         result = self._request(
             "GET",
             "/messages",
-            params={
-                "maxResults": max_results,
-            },
+            params=params,
         )
-
-        return result.get(
-            "messages",
-            [],
-        )
+        # Return full API response for pagination handling
+        return result
 
     # =====================================================
     # SEARCH
@@ -316,21 +321,22 @@ class GmailClient:
     def unread_messages(
         self,
         max_results: int = 20,
+        page_token: Optional[str] = None,
     ):
-
+        params: dict[str, object] = {
+            "labelIds": "UNREAD",
+            "maxResults": max_results,
+            "format": "metadata",
+            "metadataHeaders": "From,Subject,Date",
+        }
+        if page_token:
+            params["pageToken"] = page_token
         result = self._request(
             "GET",
             "/messages",
-            params={
-                "labelIds": "UNREAD",
-                "maxResults": max_results,
-            },
+            params=params,
         )
-
-        return result.get(
-            "messages",
-            [],
-        )
+        return result
     # =====================================================
     # THREADS
     # =====================================================
@@ -441,6 +447,9 @@ class GmailClient:
             "GET",
             "/profile",
         )
+
+    def get_unread_label_counts(self) -> dict:
+        return self.get_label("UNREAD")
 
     def get_label(
         self,

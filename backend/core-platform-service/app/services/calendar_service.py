@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 import requests
 
 from app.connectors.google.calendar import GoogleCalendarClient
+from app.connectors.google.exceptions import (
+    GoogleReauthRequiredError,
+    GoogleServiceDisabledError,
+)
 from app.services.token_service import TokenService
 
 
@@ -30,7 +34,7 @@ class CalendarService:
         user_id: int,
         time_min: str,
         time_max: str,
-        limit: int = 20,
+        limit: int = 50,
     ):
 
         try:
@@ -51,6 +55,12 @@ class CalendarService:
                 calendar = GoogleCalendarClient(token)
 
                 return calendar.list_events(time_min, time_max, limit)
+
+            elif e.response is not None and e.response.status_code == 403:
+                raise GoogleReauthRequiredError(
+                    "Google Calendar access requires reauthorization. Please reconnect your Google account in Settings/Integrations.",
+                    scope_required="https://www.googleapis.com/auth/calendar.events.readonly",
+                ) from e
 
             raise
 

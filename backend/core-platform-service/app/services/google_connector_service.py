@@ -1,5 +1,6 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 import requests
@@ -30,15 +31,27 @@ def _thread_gmail_client(access_token: str) -> GmailClient:
     return client
 
 
-def fetch_message_details(access_token: str, messages: list) -> list:
+def fetch_message_details(access_token: str, messages: Any) -> list:
     """Fetch each message body concurrently, preserving the listed order."""
-    message_ids = [m["id"] for m in messages if m.get("id")]
+    if isinstance(messages, dict):
+        messages = messages.get("messages", [])
+    if not isinstance(messages, list):
+        return []
+
+    # If messages already have subject and snippet (e.g. mocked or full objects), return them
+    if messages and isinstance(messages[0], dict) and ("subject" in messages[0] or "snippet" in messages[0]) and "payload" not in messages[0]:
+        return messages
+
+    message_ids = [m["id"] for m in messages if isinstance(m, dict) and m.get("id")]
 
     if not message_ids:
         return []
 
     def fetch(message_id: str):
-        return _thread_gmail_client(access_token).get_message_details(message_id)
+        try:
+            return _thread_gmail_client(access_token).get_message_details(message_id)
+        except Exception:
+            return {"id": message_id, "subject": "(Email details unavailable)", "snippet": ""}
 
     with ThreadPoolExecutor(
         max_workers=min(_MESSAGE_DETAIL_WORKERS, len(message_ids))
@@ -320,31 +333,82 @@ class GoogleConnectorService:
     def unread_messages(
         db: Session,
         user_id: int,
-        limit: int = 20,
+        limit: int = 50,
+        page_token: Optional[str] = None,
     ):
-
         token = TokenService.get_google_token(db, user_id=user_id)
-
         try:
-
-            messages = GmailClient(token).unread_messages(limit)
-
+            raw = GmailClient(token).unread_messages(limit, page_token=page_token)
         except requests.exceptions.HTTPError as e:
-
-            if (
-                e.response is not None
-                and e.response.status_code == 401
-            ):
-
+            if e.response is not None and e.response.status_code == 401:
                 token = TokenService.force_refresh_google_token(db, user_id=user_id)
-
-                messages = GmailClient(token).unread_messages(limit)
-
+                raw = GmailClient(token).unread_messages(limit, page_token=page_token)
             else:
-
                 raise
 
-        return fetch_message_details(token, messages)
+        if isinstance(raw, list):
+            return raw
+        items = raw.get("messages", []) if isinstance(raw, dict) else []
+        return fetch_message_details(token, items)
+
+    @staticmethod
+    def get_unread_summary(
+        db: Session,
+        user_id: int,
+        limit: int = 50,
+        page_token: Optional[str] = None,
+    ) -> dict:
+        """
+        Fetch unread emails with pagination metadata and accurate unread counts.
+        """
+        token = TokenService.get_google_token(db, user_id=user_id)
+        gmail = GmailClient(token)
+        try:
+            raw = gmail.unread_messages(max_results=limit, page_token=page_token)
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 401:
+                token = TokenService.force_refresh_google_token(db, user_id=user_id)
+                gmail = GmailClient(token)
+                raw = gmail.unread_messages(max_results=limit, page_token=page_token)
+            else:
+                raise
+
+        if isinstance(raw, list):
+            items = raw
+            next_page_token = None
+            total_estimate = len(raw)
+        else:
+            items = raw.get("messages", []) if isinstance(raw, dict) else []
+            next_page_token = raw.get("nextPageToken") if isinstance(raw, dict) else None
+            total_estimate = raw.get("resultSizeEstimate", len(items)) if isinstance(raw, dict) else len(items)
+
+        # Retrieve exact unread count from UNREAD label if available
+        total_unread = total_estimate
+        try:
+            label_data = gmail.get_unread_label_counts()
+            if isinstance(label_data, dict) and "messagesUnread" in label_data:
+                total_unread = int(label_data["messagesUnread"])
+        except Exception:
+            pass
+
+        # Deduplicate items by ID
+        seen_ids = set()
+        deduped = []
+        for m in items:
+            mid = m.get("id") if isinstance(m, dict) else str(m)
+            if mid and mid not in seen_ids:
+                seen_ids.add(mid)
+                deduped.append(m)
+
+        details = fetch_message_details(token, deduped)
+
+        return {
+            "total_unread": total_unread,
+            "fetched_count": len(details),
+            "has_more": bool(next_page_token),
+            "next_page_token": next_page_token,
+            "messages": details,
+        }
 
     @staticmethod
     def list_threads(

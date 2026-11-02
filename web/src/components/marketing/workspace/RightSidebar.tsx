@@ -12,12 +12,12 @@ export default function RightSidebar() {
         <div className="space-y-5">
             <ConfidenceCard />
             <RoutingCard />
-            <AgentActivityCard />
+            {/* <AgentActivityCard /> */}
             <ExecutionLog />
-            <TokenUsageCard />
+            {/* <TokenUsageCard />
             <ToolExecutionCard />
             <SourceCitationCard />
-            <SystemStatusCard />
+            <SystemStatusCard /> */}
         </div>
     );
 }

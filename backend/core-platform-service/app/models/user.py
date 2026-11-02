@@ -28,6 +28,8 @@ class User(Base):
 
     role = relationship("Role", back_populates="users")
 
+    timezone = Column(String(50), nullable=True, default="UTC")
+
     sessions = relationship("Session", back_populates="user")
 
     audit_logs = relationship("AuditLog", back_populates="user")

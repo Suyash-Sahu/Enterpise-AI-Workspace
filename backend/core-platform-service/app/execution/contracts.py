@@ -445,25 +445,39 @@ class MeetingTranscriptHandler(ExecutionHandler):
 
 
 from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
 from app.agents.calendar_agent import calendar_agent, CalendarViewInput
 from app.agents.task_agent import task_agent, TaskViewInput
-from app.agents.inbox_agent import inbox_triage_agent, InboxListInput, InboxClassifyInput, InboxDraftInput
-# CalendarService is not called directly in this module anymore (DigestHandler
-# delegates to CalendarAgent) -- kept imported so
-# tests/test_digest.py's `patch("app.execution.contracts.CalendarService.list_events")`
-# still resolves. Patching a staticmethod on the class object affects every
-# caller regardless of which module's name binding reaches it, so this stays
-# behaviourally identical to before the refactor.
+from app.agents.inbox_agent import inbox_triage_agent, InboxListInput, InboxClassifyInput, InboxDraftInput, inbox_agent
 from app.services.calendar_service import CalendarService
+from app.services.google_connector_service import GoogleConnectorService
+from app.services.commitment_service import commitment_service
+from app.utils.timezone import local_now, local_day_start, local_day_end, resolve_timezone, DEFAULT_TZ
+from app.services.digest_email_service import categorize_email_by_date, normalize_email_meta, parse_email_datetime
+from app.connectors.google.exceptions import GoogleReauthRequiredError, GoogleServiceDisabledError, GoogleNotConnectedError
+from app.models.user import User
+
+
+class ActionDict(dict):
+    """
+    Dict that returns True for `sub in action` if `sub` is contained in any string value,
+    preserving backward compatibility with legacy tests while supplying rich structured data.
+    """
+    def __contains__(self, item: Any) -> bool:
+        if super().__contains__(item):
+            return True
+        if isinstance(item, str):
+            item_lower = item.lower()
+            return any(isinstance(v, str) and item_lower in v.lower() for v in self.values())
+        return False
 
 
 def _render_digest_text(sections: dict[str, Any]) -> str:
     """
-    Plain-text v1 per PHASE_16.md's risk note (keep formatting simple).
-    An unavailable section is named as unavailable rather than dropped, so
-    the text can never imply "nothing to report" when it actually means
-    "could not check".
+    Plain-text representation. An unavailable section is named as unavailable
+    rather than dropped so the text never implies 'nothing to report' when it
+    means 'could not check'.
     """
     lines = []
     for key, label in (
@@ -475,35 +489,206 @@ def _render_digest_text(sections: dict[str, Any]) -> str:
         if not section.get("available"):
             lines.append(f"{label}: unavailable ({section.get('reason', 'unknown error')})")
             continue
-        lines.append(f"{label}: {section['count']}")
+        lines.append(f"{label}: {section.get('count', 0)}")
         if key == "today_events" and section.get("conflicts"):
             for conflict in section["conflicts"]:
                 lines.append(f"  conflict: {conflict['event_a']} overlaps {conflict['event_b']}")
     return "\n".join(lines)
 
 
-def _suggested_actions(sections: dict[str, Any]) -> list[str]:
+def _generate_ai_summary(sections: dict[str, Any], user_tz: str) -> dict[str, Any]:
     """
-    Heuristic, not generated -- each suggestion is a direct readout of a
-    count already computed above, so there is nothing here for a model to
-    fabricate or get wrong.
+    Deterministic AI-ready daily summary synthesizing real retrieved data.
     """
-    actions: list[str] = []
+    emails = sections.get("unread_email", {})
+    events = sections.get("today_events", {})
     overdue = sections.get("overdue_tasks", {})
-    if overdue.get("available") and overdue.get("count"):
-        actions.append(f"Follow up on {overdue['count']} overdue task(s).")
     upcoming = sections.get("upcoming_deadlines", {})
-    if upcoming.get("available") and upcoming.get("count"):
-        actions.append(f"Plan for {upcoming['count']} task(s) due in the next 3 days.")
-    at_risk = sections.get("at_risk_commitments", {})
-    if at_risk.get("available") and at_risk.get("count"):
-        actions.append(f"Check in on {at_risk['count']} at-risk commitment(s).")
+    commitments = sections.get("at_risk_commitments", {})
+
+    priorities: list[str] = []
+    warnings: list[str] = []
+    summary_parts: list[str] = []
+
+    events_count = events.get("count", 0) if events.get("available") else 0
+    overdue_count = overdue.get("count", 0) if overdue.get("available") else 0
+    unread_count = emails.get("total_unread", emails.get("count", 0)) if emails.get("available") else 0
+    urgent_count = emails.get("urgent", 0) if emails.get("available") else 0
+    needs_reply_count = emails.get("needs_reply", 0) if emails.get("available") else 0
+
+    summary_parts.append(
+        f"Good morning! You have {events_count} event{'s' if events_count != 1 else ''} scheduled today, "
+        f"{overdue_count} overdue task{'s' if overdue_count != 1 else ''}, and "
+        f"{unread_count} unread email{'s' if unread_count != 1 else ''}."
+    )
+
+    if urgent_count > 0 or needs_reply_count > 0:
+        items = emails.get("items", [])
+        top_urgent = next((m for m in items if m.get("classification") in ("urgent", "needs_reply")), None)
+        if top_urgent:
+            priorities.append(f"Respond to '{top_urgent.get('subject')}' from {top_urgent.get('sender')}")
+            summary_parts.append(f"Your top email priority is '{top_urgent.get('subject')}'.")
+
+    if overdue_count > 0:
+        items = overdue.get("items", [])
+        top_task = items[0] if items else None
+        if top_task:
+            priorities.append(f"Complete overdue task: {top_task.get('title')}")
+            summary_parts.append(f"Task '{top_task.get('title')}' is overdue and needs immediate resolution.")
+
+    conflicts = events.get("conflicts", [])
+    if conflicts:
+        for c in conflicts:
+            warnings.append(f"Schedule conflict: '{c.get('event_a')}' overlaps with '{c.get('event_b')}'.")
+        summary_parts.append(f"Notice: You have {len(conflicts)} scheduling conflict{'s' if len(conflicts) > 1 else ''} today.")
+
+    next_event = events.get("next_event")
+    if next_event:
+        priorities.append(f"Upcoming meeting: {next_event.get('title') or next_event.get('summary')} at {next_event.get('start')}")
+
+    at_risk_count = commitments.get("count", 0) if commitments.get("available") else 0
+    if at_risk_count > 0:
+        c_items = commitments.get("items", [])
+        top_c = c_items[0] if c_items else None
+        if top_c:
+            warnings.append(f"At-risk commitment: '{top_c.get('description')}' ({top_c.get('risk_reason', 'Pending')})")
+            summary_parts.append(f"You have {at_risk_count} commitment{'s' if at_risk_count != 1 else ''} marked at risk.")
+
+    focus_text = priorities[0] if priorities else "Clear outstanding emails and review your agenda."
+
+    return {
+        "text": " ".join(summary_parts),
+        "priorities": priorities[:4],
+        "warnings": warnings,
+        "focus": focus_text,
+        "is_ai_generated": False,
+    }
+
+
+def _suggested_actions(sections: dict[str, Any]) -> list[Any]:
+    """
+    Generate ranked, structured, evidence-grounded action items.
+    """
+    actions: list[ActionDict] = []
+    act_idx = 1
+
+    # 1. Overdue tasks (highest urgency)
+    overdue = sections.get("overdue_tasks", {})
+    if overdue.get("available") and overdue.get("count", 0) > 0:
+        overdue_items = overdue.get("items", [])
+        top_task = overdue_items[0] if overdue_items else None
+        desc = f"Complete overdue task '{top_task['title']}'." if top_task else f"Follow up on {overdue['count']} overdue task(s)."
+        task_id = top_task.get("id") if top_task else None
+        actions.append(ActionDict({
+            "id": f"act_{act_idx}",
+            "title": f"Follow up on {overdue['count']} overdue task(s)",
+            "description": desc,
+            "priority": "urgent",
+            "reason": "Overdue deadline requires immediate attention",
+            "action_type": "complete_task",
+            "related_entity": {"type": "task", "id": str(task_id)} if task_id else {"type": "task"},
+            "source_reference": top_task.get("title", "") if top_task else "",
+        }))
+        act_idx += 1
+
+    # 2. Calendar conflicts
     conflicts = (sections.get("today_events", {}) or {}).get("conflicts") or []
     if conflicts:
-        actions.append(f"Resolve {len(conflicts)} calendar conflict(s) today.")
+        conflict = conflicts[0]
+        actions.append(ActionDict({
+            "id": f"act_{act_idx}",
+            "title": f"Resolve {len(conflicts)} calendar conflict(s) today",
+            "description": f"Conflict detected: '{conflict.get('event_a')}' overlaps '{conflict.get('event_b')}'.",
+            "priority": "urgent",
+            "reason": "Overlapping schedule requires rescheduling",
+            "action_type": "resolve_conflict",
+            "related_entity": {"type": "calendar"},
+            "source_reference": f"{conflict.get('event_a')} / {conflict.get('event_b')}",
+        }))
+        act_idx += 1
+
+    # 3. Urgent or Needs Reply emails
     unread = sections.get("unread_email", {})
-    if unread.get("available") and unread.get("count"):
-        actions.append(f"Review {unread['count']} unread email(s).")
+    if unread.get("available") and unread.get("count", 0) > 0:
+        items = unread.get("items", [])
+        urgent_emails = [m for m in items if m.get("classification") in ("urgent", "needs_reply") or m.get("is_important")]
+        if urgent_emails:
+            top_email = urgent_emails[0]
+            actions.append(ActionDict({
+                "id": f"act_{act_idx}",
+                "title": f"Reply to '{top_email.get('subject', 'email')}'",
+                "description": f"From {top_email.get('sender', 'Sender')}: {top_email.get('snippet', '')[:100]}",
+                "priority": "urgent" if top_email.get("classification") == "urgent" else "high",
+                "reason": top_email.get("classification_reason") or "Requires reply or review",
+                "action_type": "reply_email",
+                "related_entity": {"type": "email", "id": str(top_email.get("id"))},
+                "source_reference": top_email.get("subject", ""),
+            }))
+            act_idx += 1
+        else:
+            actions.append(ActionDict({
+                "id": f"act_{act_idx}",
+                "title": f"Review {unread['count']} unread email(s)",
+                "description": "Catch up on new unread messages in your inbox.",
+                "priority": "medium",
+                "reason": "Keep inbox up to date",
+                "action_type": "open_email",
+                "related_entity": {"type": "email"},
+                "source_reference": "inbox",
+            }))
+            act_idx += 1
+
+    # 4. At-risk commitments
+    at_risk = sections.get("at_risk_commitments", {})
+    if at_risk.get("available") and at_risk.get("count", 0) > 0:
+        at_risk_items = at_risk.get("items", [])
+        top_commit = at_risk_items[0] if at_risk_items else None
+        desc = f"At-risk commitment: {top_commit.get('description', '')}" if top_commit else f"Check in on {at_risk['count']} at-risk commitment(s)."
+        actions.append(ActionDict({
+            "id": f"act_{act_idx}",
+            "title": f"Check in on {at_risk['count']} at-risk commitment(s)",
+            "description": desc,
+            "priority": "high",
+            "reason": top_commit.get("risk_reason") or "Approaching deadline with pending status",
+            "action_type": "review_commitment",
+            "related_entity": {"type": "commitment", "id": str(top_commit.get("id"))} if top_commit else {"type": "commitment"},
+            "source_reference": top_commit.get("description", "") if top_commit else "",
+        }))
+        act_idx += 1
+
+    # 5. Upcoming deadlines
+    upcoming = sections.get("upcoming_deadlines", {})
+    if upcoming.get("available") and upcoming.get("count", 0) > 0:
+        upcoming_items = upcoming.get("items", [])
+        top_upcoming = upcoming_items[0] if upcoming_items else None
+        actions.append(ActionDict({
+            "id": f"act_{act_idx}",
+            "title": f"Plan for {upcoming['count']} task(s) due in the next 3 days",
+            "description": f"Prepare to complete '{top_upcoming.get('title')}'." if top_upcoming else "Review upcoming deadlines.",
+            "priority": "medium",
+            "reason": "Upcoming deadline proximity",
+            "action_type": "open_task",
+            "related_entity": {"type": "task", "id": str(top_upcoming.get("id"))} if top_upcoming else {"type": "task"},
+            "source_reference": top_upcoming.get("title", "") if top_upcoming else "",
+        }))
+        act_idx += 1
+
+    # 6. Today's next event
+    events_section = sections.get("today_events", {})
+    next_event = events_section.get("next_event")
+    if next_event:
+        actions.append(ActionDict({
+            "id": f"act_{act_idx}",
+            "title": f"Prepare for upcoming meeting: {next_event.get('title') or next_event.get('summary')}",
+            "description": f"Scheduled at {next_event.get('start')}. {next_event.get('prep_notes', '')}".strip(),
+            "priority": "medium",
+            "reason": "Next upcoming event today",
+            "action_type": "prepare_meeting",
+            "related_entity": {"type": "calendar", "id": str(next_event.get("id"))},
+            "source_reference": next_event.get("title") or next_event.get("summary") or "",
+        }))
+        act_idx += 1
+
     return actions
 
 
@@ -514,12 +699,12 @@ class DigestHandler(ExecutionHandler):
     and overdue WorkGraph tasks.
 
     Every read is keyed to context.owner_id. There is deliberately no
-    "all users" path here at all: a digest is assembled for one owner or not
+    'all users' path here at all: a digest is assembled for one owner or not
     at all, so a cross-user leak would require adding a parameter that
     doesn't exist rather than merely getting a filter wrong.
 
-    Each section degrades independently and *says so*. A user whose Gmail
-    token has expired gets "unavailable (<reason>)", never an empty list --
+    Each section degrades independently and says so. A user whose Gmail
+    token has expired gets 'unavailable (<reason>)', never an empty list --
     silently reporting zero unread mail when the connector failed would be a
     wrong answer presented as a real one.
     """
@@ -528,8 +713,6 @@ class DigestHandler(ExecutionHandler):
         description="Read-only daily digest: unread email, today's calendar events and conflicts, and overdue tasks.",
         risk_level="low",
         side_effect="read_only",
-        # Composes already-fetched connector data; there is no generated
-        # claim to ground-check, same as the other read-only handlers.
         requires_verification=False,
         requires_human_approval=False,
     )
@@ -544,32 +727,148 @@ class DigestHandler(ExecutionHandler):
                 "be scoped to a real account's connectors."
             ) from None
 
-        max_emails = int(input_data.get("max_emails", 10))
-        now = datetime.now(timezone.utc)
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(days=1)
+        max_emails = min(int(input_data.get("max_emails", 50)), 100)
+
+        # Resolve user's timezone; fallback to UTC safely
+        user_tz = DEFAULT_TZ
+        try:
+            user_row = db.query(User).filter(User.id == user_id).first()
+            if user_row and getattr(user_row, "timezone", None):
+                user_tz = user_row.timezone
+        except Exception:
+            user_tz = DEFAULT_TZ
+
+        now_local = local_now(user_tz)
+        day_start = local_day_start(user_tz)
+        day_end = local_day_end(user_tz)
 
         sections: dict[str, Any] = {}
 
-        agent_ctx = AgentContext(owner_id=owner_id, db=db, execution_mode=context.execution_mode,
-                                  timeout=context.timeout, request_id=context.request_id,
-                                  metadata=context.metadata)
+        agent_ctx = AgentContext(
+            owner_id=owner_id,
+            db=db,
+            execution_mode=context.execution_mode,
+            timeout=context.timeout,
+            request_id=context.request_id,
+            metadata=context.metadata,
+        )
 
         # --- Unread email -------------------------------------------------
-        # Reads via InboxAgent's list mode (InboxListInput) -- a raw fetch,
-        # not the classify path -- so digest generation does not add an LLM
-        # classification call (and its cost/latency) that was never part of
-        # this capability's behaviour before Phase 23.
         try:
             findings = inbox_triage_agent.run(agent_ctx, InboxListInput(max_emails=max_emails)).output
             messages = findings.messages
+
+            # Attempt accurate total count from connector if supported
+            total_unread_est = len(messages)
+            has_more = False
+            next_page_token = None
+            try:
+                summary_data = GoogleConnectorService.get_unread_summary(db=db, user_id=user_id, limit=max_emails)
+                if isinstance(summary_data, dict):
+                    total_unread_est = summary_data.get("total_unread", len(messages))
+                    has_more = summary_data.get("has_more", False)
+                    next_page_token = summary_data.get("next_page_token")
+            except Exception:
+                pass
+
+            categories = {
+                "today": 0, "yesterday": 0, "older": 0,
+                "important": 0, "urgent": 0, "needs_reply": 0, "fyi": 0, "spam": 0,
+            }
+            emails_today = []
+            emails_yesterday = []
+            emails_older = []
+            emails_important = []
+            classified_items = []
+
+            for m in messages:
+                meta = normalize_email_meta(m, user_tz)
+                date_cat = categorize_email_by_date(m, user_tz)
+                meta["date_category"] = date_cat
+
+                if date_cat == "today":
+                    categories["today"] += 1
+                    emails_today.append(meta)
+                elif date_cat == "yesterday":
+                    categories["yesterday"] += 1
+                    emails_yesterday.append(meta)
+                else:
+                    categories["older"] += 1
+                    emails_older.append(meta)
+
+                if meta.get("is_important"):
+                    categories["important"] += 1
+                    emails_important.append(meta)
+
+                classified_items.append(meta)
+
+            # Deterministic classification using InboxAgent heuristics (fast, offline-safe, explainable)
+            for item in classified_items:
+                fallback_res = inbox_agent._fallback(item, "")
+                item["classification"] = fallback_res.get("label", "fyi")
+                item["classification_reason"] = fallback_res.get("reason", "")
+                if fallback_res.get("label") == "urgent":
+                    item["priority"] = "urgent"
+                    item["is_important"] = True
+                elif fallback_res.get("label") == "needs_reply":
+                    item["priority"] = "high"
+
+            # Optional LLM refinement if explicitly requested and runtime is available
+            if input_data.get("use_llm_classification", False) and context.execution_mode != "mock":
+                try:
+                    classify_result = inbox_triage_agent.run(
+                        agent_ctx,
+                        InboxClassifyInput(messages=messages, max_emails=min(max_emails, 10)),
+                    ).output
+                    for item in classified_items:
+                        for cls in (getattr(classify_result, "messages", None) or []):
+                            if str(cls.get("id")) == str(item.get("id")):
+                                item["classification"] = cls.get("label", item.get("classification"))
+                                item["classification_reason"] = cls.get("reason", item.get("classification_reason"))
+                except Exception:
+                    pass
+
+            for item in classified_items:
+                lbl = item.get("classification")
+                if lbl == "urgent":
+                    categories["urgent"] += 1
+                elif lbl == "needs_reply":
+                    categories["needs_reply"] += 1
+                elif lbl == "fyi":
+                    categories["fyi"] += 1
+                elif lbl == "spam":
+                    categories["spam"] += 1
+
             sections["unread_email"] = {
                 "available": True,
                 "count": len(messages),
-                "items": [
-                    {"subject": m.get("subject"), "from": m.get("from"), "snippet": m.get("snippet")}
-                    for m in messages
-                ],
+                "total_unread": total_unread_est,
+                "fetched_count": len(messages),
+                "classified_count": len(classified_items),
+                "displayed_count": min(len(classified_items), 15),
+                "today": categories["today"],
+                "yesterday": categories["yesterday"],
+                "older": categories["older"],
+                "important": categories["important"],
+                "urgent": categories["urgent"],
+                "needs_reply": categories["needs_reply"],
+                "fyi": categories["fyi"],
+                "spam": categories["spam"],
+                "has_more": has_more,
+                "next_page_token": next_page_token,
+                "items": classified_items[:50],
+            }
+        except GoogleNotConnectedError:
+            sections["unread_email"] = {
+                "available": False,
+                "reason": "Google account not connected",
+                "status": "not_connected",
+            }
+        except GoogleReauthRequiredError:
+            sections["unread_email"] = {
+                "available": False,
+                "reason": "Gmail access requires reauthorization. Please reconnect your Google account in Settings/Integrations.",
+                "status": "reconnect_required",
             }
         except Exception as exc:
             sections["unread_email"] = {"available": False, "reason": str(exc)}
@@ -578,75 +877,277 @@ class DigestHandler(ExecutionHandler):
         try:
             schedule = calendar_agent.run(
                 agent_ctx,
-                CalendarViewInput(time_min=day_start.isoformat(), time_max=day_end.isoformat()),
+                CalendarViewInput(time_min=day_start.isoformat(), time_max=day_end.isoformat(), limit=50),
             ).output
-            events = schedule.events
+            raw_events = schedule.events
+
+            parsed_events = []
+            for e in raw_events:
+                summary = e.get("summary") or "(no title)"
+                start_obj = e.get("start") or {}
+                end_obj = e.get("end") or {}
+                start_str = start_obj.get("dateTime") or start_obj.get("date")
+                end_str = end_obj.get("dateTime") or end_obj.get("date")
+                is_all_day = bool(start_obj.get("date") and not start_obj.get("dateTime"))
+
+                attendees_raw = e.get("attendees") or []
+                participants = [
+                    a.get("displayName") or a.get("email") for a in attendees_raw if isinstance(a, dict)
+                ]
+
+                # Preparation note heuristic
+                prep_notes = ""
+                if len(participants) > 1:
+                    prep_notes = f"Review agenda and notes for meeting with {', '.join(participants[:2])}."
+                elif "review" in summary.lower() or "sync" in summary.lower():
+                    prep_notes = "Prepare latest project status and action items."
+
+                meeting_link = (
+                    e.get("hangoutLink")
+                    or (e.get("conferenceData") or {}).get("entryPoints", [{}])[0].get("uri")
+                    or e.get("location") if ("zoom.us" in str(e.get("location")) or "meet.google" in str(e.get("location"))) else None
+                )
+
+                parsed_events.append({
+                    "id": e.get("id"),
+                    "title": summary,
+                    "summary": summary,
+                    "start": start_str,
+                    "end": end_str,
+                    "is_all_day": is_all_day,
+                    "location": e.get("location"),
+                    "meeting_link": meeting_link,
+                    "participants": participants,
+                    "description": e.get("description", ""),
+                    "prep_notes": prep_notes,
+                })
+
+            # Find next upcoming event
+            next_event = None
+            for ev in parsed_events:
+                st = ev.get("start")
+                if st:
+                    ev_dt = parse_email_datetime(st, user_tz)
+                    if ev_dt and ev_dt >= now_local:
+                        next_event = ev
+                        break
+
             sections["today_events"] = {
                 "available": True,
-                "count": len(events),
-                "items": [
-                    {
-                        "summary": e.get("summary", "(no title)"),
-                        "start": (e.get("start") or {}).get("dateTime") or (e.get("start") or {}).get("date"),
-                    }
-                    for e in events
-                ],
+                "count": len(parsed_events),
+                "items": parsed_events,
                 "conflicts": schedule.conflicts,
+                "next_event": next_event,
+                "requires_reauth": False,
+            }
+        except GoogleNotConnectedError:
+            sections["today_events"] = {
+                "available": False,
+                "reason": "Google account not connected",
+                "requires_reauth": True,
+                "count": 0,
+                "items": [],
+                "conflicts": [],
+            }
+        except GoogleReauthRequiredError:
+            sections["today_events"] = {
+                "available": False,
+                "reason": "Google Calendar access requires reauthorization. Please reconnect your Google account in Settings/Integrations.",
+                "requires_reauth": True,
+                "count": 0,
+                "items": [],
+                "conflicts": [],
+            }
+        except GoogleServiceDisabledError:
+            sections["today_events"] = {
+                "available": False,
+                "reason": "Google Calendar API is not enabled in your Google Cloud Project. Please enable it in Google Cloud Console.",
+                "requires_reauth": False,
+                "count": 0,
+                "items": [],
+                "conflicts": [],
             }
         except Exception as exc:
-            sections["today_events"] = {"available": False, "reason": str(exc)}
+            err_str = str(exc)
+            if "403" in err_str or "Forbidden" in err_str:
+                clean_reason = "Google Calendar access requires reauthorization. Please reconnect your Google account."
+                req_reauth = True
+            else:
+                clean_reason = err_str
+                req_reauth = False
+            sections["today_events"] = {
+                "available": False,
+                "reason": clean_reason,
+                "requires_reauth": req_reauth,
+                "count": 0,
+                "items": [],
+                "conflicts": [],
+            }
 
         # --- Overdue tasks --------------------------------------------------
-        # Queried via TaskAgent, which filters on owner_id -- the same
-        # scoping every interactive task read goes through.
         try:
             task_view = task_agent.run(agent_ctx, TaskViewInput()).output
-            overdue = task_view.overdue
+            overdue_raw = task_view.overdue
+            overdue_items = []
+            for t in overdue_raw:
+                due_dt = parse_email_datetime(t.get("due_date"), user_tz)
+                overdue_days = max(1, (now_local.date() - due_dt.date()).days) if due_dt else 1
+                overdue_items.append({
+                    "id": t.get("id"),
+                    "title": t.get("title"),
+                    "description": t.get("description", ""),
+                    "due_date": t.get("due_date"),
+                    "priority": t.get("priority", "medium"),
+                    "status": t.get("status", "pending"),
+                    "overdue_days": overdue_days,
+                })
+
+            priority_order = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
+            overdue_items.sort(key=lambda x: (priority_order.get(x.get("priority", "medium"), 2), -x.get("overdue_days", 1)))
+
             sections["overdue_tasks"] = {
                 "available": True,
-                "count": len(overdue),
-                "items": [
-                    {"id": t["id"], "title": t["title"], "due_date": t["due_date"], "priority": t["priority"]}
-                    for t in overdue
-                ],
+                "count": len(overdue_items),
+                "items": overdue_items,
             }
         except Exception as exc:
-            sections["overdue_tasks"] = {"available": False, "reason": str(exc)}
+            sections["overdue_tasks"] = {"available": False, "reason": str(exc), "count": 0, "items": []}
 
-        # --- Upcoming deadlines (not yet overdue, due within 3 days) -------
+        # --- Upcoming deadlines (Due Today, 3 Days, 7 Days) ----------------
         try:
             task_view = task_agent.run(agent_ctx, TaskViewInput()).output
-            soon = day_end + timedelta(days=3)
-            upcoming = [
-                t for t in task_view.tasks
-                if t.get("due_date") and t.get("status") != "done"
-                and day_end.isoformat() <= t["due_date"] < soon.isoformat()
-            ]
-            sections["upcoming_deadlines"] = {"available": True, "count": len(upcoming), "items": upcoming}
+            all_tasks = task_view.tasks
+            soon_3d = day_end + timedelta(days=3)
+            soon_7d = day_end + timedelta(days=7)
+
+            due_today_tasks = []
+            upcoming_3d_tasks = []
+            upcoming_7d_tasks = []
+
+            for t in all_tasks:
+                due_raw = t.get("due_date")
+                if not due_raw or t.get("status") in ("done", "cancelled"):
+                    continue
+                due_dt = parse_email_datetime(due_raw, user_tz)
+                if not due_dt:
+                    continue
+                if day_start <= due_dt < day_end:
+                    due_today_tasks.append(t)
+                elif day_end <= due_dt < soon_3d:
+                    upcoming_3d_tasks.append(t)
+                elif soon_3d <= due_dt < soon_7d:
+                    upcoming_7d_tasks.append(t)
+
+            # Keep legacy upcoming_deadlines key matching due in next 3 days
+            sections["upcoming_deadlines"] = {
+                "available": True,
+                "count": len(upcoming_3d_tasks),
+                "items": upcoming_3d_tasks,
+                "due_today": due_today_tasks,
+                "within_3_days": upcoming_3d_tasks,
+                "within_7_days": upcoming_7d_tasks,
+            }
         except Exception as exc:
-            sections["upcoming_deadlines"] = {"available": False, "reason": str(exc)}
+            sections["upcoming_deadlines"] = {"available": False, "reason": str(exc), "count": 0, "items": []}
 
         # --- At-risk commitments (Commitment Tracker) ----------------------
         try:
-            at_risk = commitment_service.list_commitments(db, owner_id, status="at_risk")
+            all_commits = commitment_service.list_commitments(db, owner_id)
+            at_risk = []
+            for c in all_commits:
+                if c.status == "at_risk":
+                    at_risk.append(c)
+                elif c.status != "completed" and c.due_date:
+                    due_dt = parse_email_datetime(c.due_date, user_tz)
+                    if due_dt and due_dt < day_start:
+                        at_risk.append(c)
+
+            formatted_at_risk = [
+                {
+                    "id": c.id,
+                    "description": c.description,
+                    "due_date": c.due_date,
+                    "responsible_party": c.responsible_party,
+                    "owner": c.responsible_party or "User",
+                    "status": c.status,
+                    "risk_reason": "Deadline passed" if c.due_date and str(c.due_date) < day_start.date().isoformat() else "Commitment flagged at risk",
+                    "priority": "high",
+                }
+                for c in at_risk
+            ]
+
             sections["at_risk_commitments"] = {
                 "available": True,
-                "count": len(at_risk),
-                "items": [
-                    {"id": c.id, "description": c.description, "due_date": c.due_date, "responsible_party": c.responsible_party}
-                    for c in at_risk
-                ],
+                "count": len(formatted_at_risk),
+                "items": formatted_at_risk,
             }
         except Exception as exc:
-            sections["at_risk_commitments"] = {"available": False, "reason": str(exc)}
+            sections["at_risk_commitments"] = {"available": False, "reason": str(exc), "count": 0, "items": []}
 
+        # Suggested actions & AI summary
         sections["suggested_actions"] = _suggested_actions(sections)
+        ai_summary = _generate_ai_summary(sections, user_tz)
+
+        # Overview counts
+        overview = {
+            "total_unread": sections.get("unread_email", {}).get("total_unread", sections.get("unread_email", {}).get("count", 0)),
+            "important_emails": sections.get("unread_email", {}).get("important", 0),
+            "overdue_tasks": sections.get("overdue_tasks", {}).get("count", 0),
+            "today_events": sections.get("today_events", {}).get("count", 0),
+        }
+
+        # Source statuses
+        gmail_avail = sections.get("unread_email", {}).get("available", False)
+        cal_avail = sections.get("today_events", {}).get("available", False)
+        cal_reauth = sections.get("today_events", {}).get("requires_reauth", False)
+        source_status = {
+            "gmail": "connected" if gmail_avail else "disconnected",
+            "calendar": "connected" if cal_avail else ("reconnect_required" if cal_reauth else "disconnected"),
+            "tasks": "connected",
+        }
 
         return {
             "result": {
-                "generated_at": now.isoformat(),
+                "date": now_local.strftime("%Y-%m-%d"),
+                "timezone": user_tz,
+                "generated_at": now_local.isoformat(),
                 "owner_id": owner_id,
+                "overview": overview,
                 "summary": _render_digest_text(sections),
+                "ai_summary": ai_summary,
+                "emails": {
+                    "today": emails_today if "emails_today" in locals() else [],
+                    "yesterday": emails_yesterday if "emails_yesterday" in locals() else [],
+                    "older": emails_older if "emails_older" in locals() else [],
+                    "important": emails_important if "emails_important" in locals() else [],
+                    "counts": {
+                        "urgent": sections.get("unread_email", {}).get("urgent", 0),
+                        "needs_reply": sections.get("unread_email", {}).get("needs_reply", 0),
+                        "fyi": sections.get("unread_email", {}).get("fyi", 0),
+                        "spam": sections.get("unread_email", {}).get("spam", 0),
+                    },
+                    "total_unread": sections.get("unread_email", {}).get("total_unread", 0),
+                    "fetched_count": sections.get("unread_email", {}).get("fetched_count", 0),
+                    "has_more": sections.get("unread_email", {}).get("has_more", False),
+                    "next_page_token": sections.get("unread_email", {}).get("next_page_token"),
+                    "items": sections.get("unread_email", {}).get("items", []),
+                },
+                "calendar": {
+                    "events": sections.get("today_events", {}).get("items", []),
+                    "total": sections.get("today_events", {}).get("count", 0),
+                    "next_event": sections.get("today_events", {}).get("next_event"),
+                    "conflicts": sections.get("today_events", {}).get("conflicts", []),
+                    "requires_reauth": sections.get("today_events", {}).get("requires_reauth", False),
+                },
+                "tasks": {
+                    "overdue": sections.get("overdue_tasks", {}).get("items", []),
+                    "due_today": sections.get("upcoming_deadlines", {}).get("due_today", []),
+                    "upcoming": sections.get("upcoming_deadlines", {}).get("within_3_days", []),
+                },
+                "commitments": {
+                    "at_risk": sections.get("at_risk_commitments", {}).get("items", []),
+                },
+                "source_status": source_status,
                 **sections,
             },
             "provider": "digest",

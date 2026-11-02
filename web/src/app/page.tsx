@@ -13,13 +13,9 @@ export default function Home() {
   return (
     <MarketingLayout>
       <Hero />
-      <HeroTrust />
+      {/* <HeroTrust /> */}
       <HowItWorks />
-      <Features surface />
-      <Integrations />
-      <Security surface />
-      <Pricing />
-      <FAQ surface />
+
       <CTA />
     </MarketingLayout>
   );

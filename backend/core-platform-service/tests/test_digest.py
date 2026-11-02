@@ -325,3 +325,72 @@ def test_scheduled_digest_automation_runs_end_to_end_and_is_owner_scoped(test_us
     finally:
         _purge_tasks(db2, owner, {mine})
         db2.close()
+
+
+def test_digest_calendar_403_surfaces_reauth_without_leaking_url(test_user):
+    from app.connectors.google.exceptions import GoogleReauthRequiredError
+    with patch(GMAIL_PATH, return_value=[]), \
+         patch(CALENDAR_PATH, side_effect=GoogleReauthRequiredError("Calendar access requires reauthorization")):
+        out = DigestHandler().execute(SessionLocal(), _context(str(test_user.id)), {})
+
+    res = out["result"]
+    cal = res["today_events"]
+    assert cal["available"] is False
+    assert cal["requires_reauth"] is True
+    assert "https://" not in cal["reason"]
+    assert "reauthorization" in cal["reason"].lower()
+    # Ensure source_status reflects reconnect_required
+    assert res["source_status"]["calendar"] == "reconnect_required"
+    # Ensure rest of digest still succeeds
+    assert res["overdue_tasks"]["available"] is True
+
+
+def test_digest_email_date_grouping_and_metrics(test_user):
+    now = datetime.now(timezone.utc)
+    yesterday = now - timedelta(days=1)
+    older = now - timedelta(days=5)
+
+    sample_emails = [
+        {"id": "msg_today", "subject": "Urgent: System Alert", "snippet": "Immediate action required", "date": now.isoformat()},
+        {"id": "msg_yday", "subject": "Can you review?", "snippet": "Please confirm by tomorrow", "date": yesterday.isoformat()},
+        {"id": "msg_older", "subject": "Newsletter 50% Off", "snippet": "Unsubscribe here", "date": older.isoformat()},
+    ]
+
+    with patch(GMAIL_PATH, return_value=sample_emails), \
+         patch(CALENDAR_PATH, return_value=[]):
+        out = DigestHandler().execute(SessionLocal(), _context(str(test_user.id)), {})
+
+    res = out["result"]
+    emails = res["emails"]
+    assert len(emails["today"]) == 1
+    assert len(emails["yesterday"]) == 1
+    assert len(emails["older"]) == 1
+    assert res["overview"]["total_unread"] == 3
+    assert emails["counts"]["urgent"] >= 1 or emails["counts"]["needs_reply"] >= 1
+    assert len(res["suggested_actions"]) > 0
+
+
+def test_digest_due_today_and_task_buckets(test_user):
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    owner = str(test_user.id)
+    t_today = "task-due-today-test"
+    t_3d = "task-due-3d-test"
+    now = datetime.now(timezone.utc)
+    try:
+        _purge_tasks(db, owner, {t_today, t_3d})
+        workgraph_service.create_task(db=db, owner_id=owner, title=t_today, due_date=now)
+        workgraph_service.create_task(db=db, owner_id=owner, title=t_3d, due_date=now + timedelta(days=2))
+
+        with patch(GMAIL_PATH, return_value=[]), patch(CALENDAR_PATH, return_value=[]):
+            out = DigestHandler().execute(db, _context(owner), {})
+
+        tasks_res = out["result"]["tasks"]
+        due_today_titles = [t["title"] for t in tasks_res["due_today"]]
+        upcoming_titles = [t["title"] for t in tasks_res["upcoming"]]
+        assert t_today in due_today_titles
+        assert t_3d in upcoming_titles
+    finally:
+        _purge_tasks(db, owner, {t_today, t_3d})
+        db.close()
+

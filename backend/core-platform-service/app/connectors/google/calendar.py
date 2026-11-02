@@ -4,6 +4,11 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from app.connectors.google.exceptions import (
+    GoogleReauthRequiredError,
+    GoogleServiceDisabledError,
+)
+
 
 class GoogleCalendarClient:
     """
@@ -72,6 +77,29 @@ class GoogleCalendarClient:
             **kwargs,
         )
 
+        if getattr(response, "status_code", 200) == 403:
+            err_data = {}
+            try:
+                err_data = response.json()
+            except Exception:
+                pass
+            err_info = err_data.get("error", {})
+            message = err_info.get("message", "") if isinstance(err_info, dict) else str(err_info)
+            errors = err_info.get("errors", []) if isinstance(err_info, dict) else []
+            reasons = [e.get("reason") for e in errors if isinstance(e, dict)]
+            details = err_info.get("details", []) if isinstance(err_info, dict) else []
+            detail_reasons = [d.get("reason") for d in details if isinstance(d, dict)]
+            all_reasons = reasons + detail_reasons
+
+            if "SERVICE_DISABLED" in all_reasons or "accessNotConfigured" in all_reasons or "not been used in project" in message:
+                raise GoogleServiceDisabledError(
+                    "Google Calendar API is not enabled in your Google Cloud Project. Please enable it in Google Cloud Console."
+                )
+            raise GoogleReauthRequiredError(
+                "Google Calendar access requires reauthorization. Please reconnect your Google account in Settings/Integrations.",
+                scope_required="https://www.googleapis.com/auth/calendar.events.readonly",
+            )
+
         response.raise_for_status()
 
         if response.text.strip():
@@ -88,7 +116,7 @@ class GoogleCalendarClient:
         self,
         time_min: str,
         time_max: str,
-        max_results: int = 20,
+        max_results: int = 50,
     ):
 
         result = self._request(
@@ -103,10 +131,12 @@ class GoogleCalendarClient:
             },
         )
 
-        return result.get(
+        raw_items = result.get(
             "items",
             [],
         )
+        # Exclude cancelled events
+        return [e for e in raw_items if e.get("status") != "cancelled"]
 
     # =====================================================
     # GET EVENT
