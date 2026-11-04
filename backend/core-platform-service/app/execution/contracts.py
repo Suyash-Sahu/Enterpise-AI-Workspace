@@ -1275,10 +1275,18 @@ class CommitmentScanHandler(ExecutionHandler):
                                   metadata=context.metadata)
 
         messages = inbox_triage_agent.run(agent_ctx, InboxListInput(max_emails=max_emails)).output.messages
-        gmail_commitments = inbox_agent.extract_commitments(
-            list(messages), execution_mode=context.execution_mode,
-            timeout=context.timeout, request_id=context.request_id,
+        raw_extract = inbox_agent.extract_commitments(
+            list(messages),
+            execution_mode=context.execution_mode,
+            timeout=context.timeout,
+            request_id=context.request_id,
         )
+        if isinstance(raw_extract, dict) and "commitments" in raw_extract:
+            gmail_commitments = raw_extract["commitments"]
+            extraction_res = raw_extract
+        else:
+            gmail_commitments = raw_extract if isinstance(raw_extract, list) else []
+            extraction_res = getattr(inbox_agent, "_last_telemetry", {}) or {}
 
         created = 0
         updated = 0
@@ -1289,8 +1297,13 @@ class CommitmentScanHandler(ExecutionHandler):
                 description=item["description"],
                 source_type="gmail",
                 source_ref=item["id"],
-                responsible_party=item.get("owner"),
+                responsible_party=item.get("owner") or item.get("responsible_party"),
+                counterparty=item.get("counterparty"),
+                direction=item.get("direction", "owed_by_me"),
                 due_date=item.get("due_date"),
+                evidence=item.get("evidence"),
+                confidence=item.get("confidence", 0.9),
+                priority=item.get("priority", "medium"),
             )
             created += int(was_created)
             updated += int(not was_created)
@@ -1315,6 +1328,15 @@ class CommitmentScanHandler(ExecutionHandler):
                 "scanned_meeting_items": len(action_items),
                 "created": created,
                 "updated": updated,
+                "total_messages": extraction_res.get("total_messages", len(messages)),
+                "processed_messages": extraction_res.get("processed_messages", len(messages)),
+                "successful_messages": extraction_res.get("successful_messages", len(messages)),
+                "no_commitment_messages": extraction_res.get("no_commitment_messages", 0),
+                "failed_messages": extraction_res.get("failed_messages", 0),
+                "commitments_found": len(gmail_commitments) + len(action_items),
+                "status": extraction_res.get("status", "completed"),
+                "warnings": extraction_res.get("warnings", []),
+                "errors": extraction_res.get("errors", []),
             },
             "provider": "commitment_service",
             "model": None,

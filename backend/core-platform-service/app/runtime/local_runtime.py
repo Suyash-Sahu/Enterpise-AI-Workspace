@@ -34,7 +34,8 @@ class OllamaRuntime(RuntimeProvider):
                 "temperature": request.temperature or 0.2,
                 "num_predict": request.max_tokens or 1024,
                 "num_ctx": settings.OLLAMA_NUM_CTX,
-            }
+            },
+            "keep_alive": getattr(settings, "OLLAMA_KEEP_ALIVE", "15m"),
         }
         if request.system_prompt:
             payload["system"] = request.system_prompt
@@ -47,11 +48,32 @@ class OllamaRuntime(RuntimeProvider):
             method="POST",
         )
 
+        timeout_sec = request.timeout or settings.RUNTIME_TIMEOUT
+        max_retries = 2
+        last_error = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                with _local_runtime_semaphore:
+                    with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+                        raw_res = json.loads(resp.read().decode("utf-8"))
+                        break
+            except (urllib.error.URLError, ConnectionResetError, TimeoutError) as e:
+                last_error = e
+                if attempt < max_retries:
+                    backoff = 0.5 * (attempt + 1)
+                    logger.warning("[OllamaRuntime] Transient error on attempt %d: %s. Retrying in %.1fs...", attempt + 1, e, backoff)
+                    time.sleep(backoff)
+                else:
+                    logger.error("[OllamaRuntime] Failed after %d attempts: %s", max_retries + 1, e)
+            except Exception as e:
+                last_error = e
+                break
+
+        if last_error and 'raw_res' not in locals():
+            fallback_policy.handle_local_failure(last_error)
+
         try:
-            timeout_sec = request.timeout or settings.RUNTIME_TIMEOUT
-            with _local_runtime_semaphore:
-                with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
-                    raw_res = json.loads(resp.read().decode("utf-8"))
 
             latency_ms = round((time.time() - start_time) * 1000, 2)
             completion_text = raw_res.get("response", "")
@@ -73,6 +95,28 @@ class OllamaRuntime(RuntimeProvider):
             )
         except Exception as e:
             fallback_policy.handle_local_failure(e)
+
+    def warmup(self, model: str | None = None) -> bool:
+        """Primes the model into memory with configured keep_alive."""
+        model_name = model or settings.OLLAMA_DEFAULT_MODEL
+        try:
+            url = f"{self.base_url}/api/generate"
+            payload = {
+                "model": model_name,
+                "prompt": "",
+                "keep_alive": getattr(settings, "OLLAMA_KEEP_ALIVE", "15m"),
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                return resp.status == 200
+        except Exception as e:
+            logger.debug("[OllamaRuntime] Model warm-up skipped or failed: %s", e)
+            return False
 
     def is_available(self) -> bool:
         try:

@@ -21,6 +21,8 @@ from app.models.automation import Automation
 from app.models.agent_state import AgentStateEntry
 from app.models.decomposition_attempt import DecompositionAttempt
 from app.models.commitment import Commitment
+from app.models.commitment_run import CommitmentRun, CommitmentRunStage
+from app.models.commitment_event import CommitmentEvent
 
 __all__ = [
     "User",
@@ -53,4 +55,7 @@ __all__ = [
     "AgentStateEntry",
     "DecompositionAttempt",
     "Commitment",
+    "CommitmentRun",
+    "CommitmentRunStage",
+    "CommitmentEvent",
 ]

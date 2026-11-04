@@ -97,6 +97,7 @@ class PrivacyClassifier:
         from app.rag.embeddings import embedding_service
 
         vectors: list[tuple[list[float], SensitivityLabel]] = []
+        consecutive_failures = 0
         for item in exemplars:
             text = (item.get("text") or "").strip()
             raw_label = (item.get("label") or "").strip().lower()
@@ -104,15 +105,28 @@ class PrivacyClassifier:
                 continue
             try:
                 vec = embedding_service.generate_embedding(text)
+                consecutive_failures = 0
             except Exception as exc:
+                consecutive_failures += 1
                 logger.warning("[PrivacyClassifier] exemplar embedding failed: %s", exc)
+                if consecutive_failures >= 3 and len(vectors) == 0:
+                    logger.warning("[PrivacyClassifier] Embedding provider unavailable. Aborting exemplar load early to prevent latency.")
+                    break
                 continue
             if vec:
                 vectors.append((vec, _LABEL_BY_VALUE[raw_label]))
 
         self._exemplar_vectors = vectors
-        self._exemplars_loaded = True
-        logger.info("[PrivacyClassifier] exemplar index built: %d vectors", len(vectors))
+        if exemplars and len(vectors) == 0:
+            self._is_degraded = True
+            self._last_error = f"Exemplar embedding failed for all {len(exemplars)} items"
+            self._exemplars_loaded = False
+            logger.error("[PrivacyClassifier] Exemplar index built with 0 vectors from %d exemplars. Embedding service degraded.", len(exemplars))
+        else:
+            self._is_degraded = False
+            self._last_error = None
+            self._exemplars_loaded = True
+            logger.info("[PrivacyClassifier] exemplar index built: %d vectors", len(vectors))
         return len(vectors)
 
     def _load_default_exemplars(self) -> None:
@@ -153,6 +167,23 @@ class PrivacyClassifier:
     @property
     def exemplar_count(self) -> int:
         return len(self._exemplar_vectors)
+
+    @property
+    def is_ready(self) -> bool:
+        if not self._exemplars_loaded:
+            self._load_default_exemplars()
+        return not getattr(self, "_is_degraded", False)
+
+    def get_readiness(self) -> dict[str, Any]:
+        if not self._exemplars_loaded:
+            self._load_default_exemplars()
+        return {
+            "ready": not getattr(self, "_is_degraded", False),
+            "exemplars_loaded": self._exemplars_loaded,
+            "exemplar_count": len(self._exemplar_vectors),
+            "degraded": getattr(self, "_is_degraded", False),
+            "error": getattr(self, "_last_error", None),
+        }
 
     # --- Stages -------------------------------------------------------------
 

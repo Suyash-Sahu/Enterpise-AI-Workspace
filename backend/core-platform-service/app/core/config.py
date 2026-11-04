@@ -255,6 +255,7 @@ class Settings(BaseSettings):
     # MUST be paired with OLLAMA_NUM_CTX below: at Ollama's default 32k context
     # this model reserves 8.0GB and runs 70% on CPU; at 4096 it is 3.5GB / 67% GPU.
     OLLAMA_DEFAULT_MODEL: str = os.getenv("OLLAMA_DEFAULT_MODEL", "qwen3:4b-instruct")
+    OLLAMA_KEEP_ALIVE: str = os.getenv("OLLAMA_KEEP_ALIVE", "15m")
     # Context window for local generation. Not a quality knob -- a VRAM knob.
     # The dev machine has a 4GB RTX 2050; see the measurements above.
     OLLAMA_NUM_CTX: int = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
@@ -264,6 +265,11 @@ class Settings(BaseSettings):
     # any constraint -- it only empties the cloud half of the candidate set.
     # Flip to true (and set OPENROUTER_API_KEY) to restore hybrid execution.
     RUNTIME_CLOUD_ENABLED: bool = os.getenv("RUNTIME_CLOUD_ENABLED", "false").lower() in ("1", "true", "yes")
+
+    # Commitment Intelligence Settings
+    COMMITMENT_BATCH_SIZE: int = int(os.getenv("COMMITMENT_BATCH_SIZE", "3"))
+    COMMITMENT_CONFIDENCE_THRESHOLD: float = float(os.getenv("COMMITMENT_CONFIDENCE_THRESHOLD", "0.65"))
+    COMMITMENT_MAX_REPAIR_ATTEMPTS: int = int(os.getenv("COMMITMENT_MAX_REPAIR_ATTEMPTS", "2"))
 
     # Project 3 RAG Settings
     EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "openai")
@@ -413,7 +419,7 @@ class Settings(BaseSettings):
     PRIVACY_LLM_JUDGE_ENABLED: bool = os.getenv("PRIVACY_LLM_JUDGE_ENABLED", "true").lower() == "true"
     # Empty string means "use the default local model".
     PRIVACY_JUDGE_MODEL: str = os.getenv("PRIVACY_JUDGE_MODEL", "")
-    PRIVACY_JUDGE_TIMEOUT: float = float(os.getenv("PRIVACY_JUDGE_TIMEOUT", "15.0"))
+    PRIVACY_JUDGE_TIMEOUT: float = float(os.getenv("PRIVACY_JUDGE_TIMEOUT", "30.0"))
     PRIVACY_MAX_SCAN_CHARS: int = int(os.getenv("PRIVACY_MAX_SCAN_CHARS", "20000"))
 
     # --- Answer quality judge (evaluation harness only) ---

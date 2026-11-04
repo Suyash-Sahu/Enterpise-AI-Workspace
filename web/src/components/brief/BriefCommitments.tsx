@@ -122,7 +122,7 @@ export function BriefCommitments({ commitments = [], timezone }: BriefCommitment
 
                             <div className="shrink-0 self-center">
                                 <Link
-                                    href="/work/commitments"
+                                    href="/commitments"
                                     className="inline-flex items-center gap-1 rounded-lg border border-amber-300/80 bg-amber-50/60 px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
                                 >
                                     <span>Review</span>
